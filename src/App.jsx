@@ -11,6 +11,7 @@ import {
   cerrarRiegoManual,
   guardarProgramacionTemporada,
   guardarLineaBackend,
+  borrarLineaBackend,
   guardarAjustesProyecto,
   obtenerHistorialHorario,
   URL_LANZADOR,
@@ -5532,7 +5533,19 @@ export default function VerdticalControlPanel() {
     });
   };
 
-  const removeSector = (id) => {
+  // Borra la línea también en el servidor cuando está emparejada: si solo se
+  // quita de aquí, reaparece al abrir desde otro móvil o desde el panel
+  // compartido, y no hay forma de deshacerse de ella. Las líneas sin
+  // emparejar solo existen en este navegador, así que basta con quitarlas.
+  const removeSector = async (id) => {
+    const sector = sectors?.find((s) => s.id === id);
+    if (sector?.lineaBackendId) {
+      const r = await borrarLineaBackend(sector.lineaBackendId);
+      if (!r.ok) {
+        setAvisoGuardarConfigLinea({ id, ok: false, mensaje: `No se pudo borrar: ${r.error}` });
+        return;
+      }
+    }
     setSectors((prev) => prev.filter((s) => s.id !== id));
   };
 

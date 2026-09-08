@@ -369,6 +369,33 @@ export async function guardarAjustesProyecto(campos) {
 // datos del sitio" los perdía para siempre sin posibilidad de recuperarlos.
 // Usa el mismo PUT /lineas/:id que ya existía (el backend ya aceptaba estos
 // campos, solo faltaba que el panel los mandara alguna vez).
+// DELETE /lineas/:id — borra la línea en el servidor, no solo en esta
+// pantalla. Hasta ahora el botón de eliminar solo la quitaba del estado
+// local: volvía a aparecer al abrir desde otro móvil, tras borrar los datos
+// del sitio o desde el panel compartido. En Galileo eso dejó tres zonas
+// fantasma que nadie conseguía quitarse de encima.
+//
+// El backend borra en cascada las lecturas, programas, riegos y alarmas de
+// esa línea, así que quien llame tiene que haber preguntado antes.
+export async function borrarLineaBackend(lineaId) {
+  if (!BASE_URL || !sessionToken || !lineaId) return { ok: false, error: 'no configurado' };
+  try {
+    const res = await fetch(`${BASE_URL}/lineas/${lineaId}`, {
+      method: 'DELETE',
+      headers: cabecerasAuth(),
+    });
+    if (res.status === 401) onUnauthorized();
+    // 404 se acepta: si ya no está, el objetivo se ha cumplido igual.
+    if (!res.ok && res.status !== 404) {
+      const data = await res.json().catch(() => ({}));
+      return { ok: false, error: data.error || `HTTP ${res.status}` };
+    }
+    return { ok: true };
+  } catch (err) {
+    return { ok: false, error: err.message };
+  }
+}
+
 export async function guardarLineaBackend(lineaId, campos) {
   if (!BASE_URL || !sessionToken || !lineaId) return { ok: false, error: 'no configurado' };
   try {
