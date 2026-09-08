@@ -3935,7 +3935,9 @@ export default function VerdticalControlPanel() {
           newEvents.push({ ts: now.toISOString(), text: `${s.name}: válvula cerrada` });
         }
       }
-      const lecturaReal = buscarLectura(lecturasReales, s.name, indiceLinea);
+      // s.lineaBackendId manda: sin él, un nombre que no case dejaba el
+      // emparejamiento en manos de la posición, que puede señalar otra línea.
+      const lecturaReal = buscarLectura(lecturasReales, s.name, indiceLinea, s.lineaBackendId);
       let sim = lecturaReal
         ? {
             humidity: lecturaReal.humidity ?? s.sensors?.humidity ?? 45,

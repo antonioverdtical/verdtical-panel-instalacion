@@ -149,8 +149,13 @@ export async function obtenerUltimasLecturas() {
     // del panel no coinciden con los del backend (ej. "Línea 1" vs "Zona1").
     const porNombre = {};
     const porPosicion = [];
+    const porId = {};
     for (const fila of filas) {
       const lectura = {
+        // Id real de la línea en el backend. Antes se descartaba, y quien
+        // llamaba no tenía más remedio que adivinar por nombre o por
+        // posición — ver buscarLectura.
+        lineaId: fila.linea_id,
         humidity: fila.humedad !== null ? Number(fila.humedad) : null,
         temperature: fila.temperatura !== null ? Number(fila.temperatura) : null,
         ec: fila.ce !== null ? Number(fila.ce) : null,
@@ -164,19 +169,32 @@ export async function obtenerUltimasLecturas() {
       };
       porNombre[normalizar(fila.nombre)] = lectura;
       porPosicion.push(lectura);
+      porId[fila.linea_id] = lectura;
     }
-    return { porNombre, porPosicion };
+    return { porNombre, porPosicion, porId };
   } catch {
     return null;
   }
 }
 
-// Busca la lectura real de un sector del panel: primero por nombre (tolerando
-// pequeñas diferencias de formato), y si no hay coincidencia, por posición
-// (la línea nº N del panel con la línea nº N real del backend) — para paneles
-// donde las líneas tienen nombres propios distintos a los del backend.
-export function buscarLectura(lecturasReales, nombreSector, posicion) {
+// Busca la lectura real de un sector del panel. El orden importa:
+//
+// 1) Por lineaBackendId — exacto. Es el emparejamiento que hace el resto
+//    del panel (historial horario, programación) y el único que no puede
+//    equivocarse de línea.
+// 2) Por nombre normalizado, para sectores que todavía no tienen id.
+// 3) Por posición, SOLO si no hay id. Es una suposición: depende de que el
+//    backend devuelva las filas en el mismo orden que los sectores del
+//    panel, cosa que nadie garantiza.
+//
+// Si el sector tiene id y no hay lectura para esa línea, se devuelve null
+// en vez de caer a la posición. Antes esa caída hacía que un sector
+// mostrara los datos de OTRA línea sin avisar — en Jarcia el panel decía
+// que regaba la 2 mientras Loxone regaba la 6. Mejor un sector sin datos
+// que un sector con los datos del vecino.
+export function buscarLectura(lecturasReales, nombreSector, posicion, lineaBackendId) {
   if (!lecturasReales) return null;
+  if (lineaBackendId != null) return lecturasReales.porId?.[lineaBackendId] || null;
   const porNombre = lecturasReales.porNombre?.[normalizar(nombreSector)];
   if (porNombre) return porNombre;
   if (typeof posicion === 'number') return lecturasReales.porPosicion?.[posicion] || null;
