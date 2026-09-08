@@ -687,11 +687,20 @@ function transformarHistorialDiario(filas) {
         label: d.toLocaleDateString("es-ES", { day: "2-digit", month: "short" }),
         total: 0,
         porLinea: {},
+        // Medias diarias de sensores por línea. Van en un mapa aparte y no
+        // dentro de porLinea para no cambiar la forma de lo que ya lo usaba.
+        sensoresPorLinea: {},
       };
     }
     const litros = Number(f.litros || 0);
     porDia[dateStr].total += litros;
     porDia[dateStr].porLinea[f.linea_id] = litros;
+    const num = (v) => (v === null || v === undefined ? null : Number(v));
+    porDia[dateStr].sensoresPorLinea[f.linea_id] = {
+      humedad: num(f.humedad_media),
+      temperatura: num(f.temperatura_media),
+      ce: num(f.ce_media),
+    };
   });
   return Object.values(porDia).sort((a, b) => new Date(a.date) - new Date(b.date));
 }
@@ -3714,8 +3723,33 @@ export default function VerdticalControlPanel() {
               const historialLinea = historialDiarioPorDia
                 .filter((d) => d.porLinea[s.lineaBackendId] !== undefined)
                 .map((d) => ({ date: d.date, label: d.label, liters: Math.round(d.porLinea[s.lineaBackendId]) }));
-              if (historialLinea.length === 0) return s;
-              return { ...s, dailyConsumption: historialLinea };
+              // Humedad, temperatura y CE del servidor. Antes estas series
+              // nacían vacías y se llenaban en el navegador mientras el panel
+              // estuviera abierto: se perdían al borrar los datos del sitio y
+              // no existían al abrir desde otro móvil. Mismo arreglo que ya se
+              // hizo con los litros.
+              const serie = (campo, clave) =>
+                historialDiarioPorDia
+                  .filter((d) => {
+                    const v = d.sensoresPorLinea?.[s.lineaBackendId];
+                    return v && v[campo] !== null && v[campo] !== undefined;
+                  })
+                  .map((d) => ({
+                    date: d.date,
+                    label: d.label,
+                    [clave]: Math.round(d.sensoresPorLinea[s.lineaBackendId][campo] * 10) / 10,
+                  }));
+              const humedad = serie("humedad", "avgHumidity");
+              const temperatura = serie("temperatura", "avgTemperature");
+              const ce = serie("ce", "avgEc");
+              if (historialLinea.length === 0 && humedad.length === 0) return s;
+              return {
+                ...s,
+                ...(historialLinea.length > 0 ? { dailyConsumption: historialLinea } : {}),
+                ...(humedad.length > 0 ? { humidityDailyHistory: humedad } : {}),
+                ...(temperatura.length > 0 ? { temperatureDailyHistory: temperatura } : {}),
+                ...(ce.length > 0 ? { ecDailyHistory: ce } : {}),
+              };
             })
           );
         }
