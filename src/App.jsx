@@ -1498,6 +1498,14 @@ function SectorCard({ sector, now, mainSupply, maestraCerrada, tecnico, cliente,
   const sensors = sector.sensors || { humidity: 0, temperature: 0, ec: 0, flowMeasured: 0, litersToday: 0 };
   const th = sector.thresholds || { humidityMin: 30, humidityMax: 65, ecMin: 1.2, ecMax: 2.4 };
   const setUmbral = (campo, valor) => onUpdate({ ...sector, thresholds: { ...th, [campo]: valor } });
+  // Horarios que se ven en pantalla pero que el riego automático NO va a
+  // ejecutar: o no se han guardado nunca en el servidor, o la línea no está
+  // emparejada con su zona. Se mira la temporada ACTUAL, que es la que decide
+  // si riega hoy. Cada línea nace con horarios por defecto, así que sin este
+  // aviso una línea inerte se ve idéntica a una que riega de verdad.
+  const temporadaActual = getSeasonForDate(now);
+  const horariosDeHoy = (sector.schedules || {})[temporadaActual] || [];
+  const programacionInerte = horariosDeHoy.length > 0 && !sector.schedulesGuardadas?.[temporadaActual];
   // El botón de guardar solo tiene sentido con línea emparejada: sin ella no
   // hay a qué línea del backend mandar los umbrales.
   const propsGuardarUmbral = {
@@ -1798,6 +1806,14 @@ function SectorCard({ sector, now, mainSupply, maestraCerrada, tecnico, cliente,
         </div>
       </div>
 
+      {programacionInerte && (
+        <div className="vc-prog-inerte">
+          ⚠ <strong>Esta línea no regará sola.</strong>{" "}
+          {sector.lineaBackendId
+            ? "Sus horarios solo están en este navegador: ábrelos y pulsa «Guardar programación»."
+            : "No está emparejada con ninguna zona, así que su programación no se puede guardar."}
+        </div>
+      )}
       <div className="vc-sensor-grid">
         <SensorStat
           label="Humedad"
@@ -2525,6 +2541,13 @@ function SectorCard({ sector, now, mainSupply, maestraCerrada, tecnico, cliente,
             + añadir horario ({eventos.length}/{MAX_HORARIOS_POR_LINEA})
           </button>
 
+          {!sector.lineaBackendId && (
+            <p className="vc-prog-inerte" style={{ marginTop: "6px" }}>
+              ⚠ No se puede guardar esta programación: la línea no está emparejada con
+              ninguna zona. Elígela arriba, en «Zona real de esta línea», y entonces
+              aparecerá el botón de guardar.
+            </p>
+          )}
           {sector.lineaBackendId && (
             <div className="vc-manual-block" style={{ marginTop: "6px" }}>
               <button
@@ -7490,6 +7513,19 @@ export default function VerdticalControlPanel() {
           font-size: 10px;
           font-weight: 400;
           color: var(--vc-text-muted, #8fa39e);
+          line-height: 1.4;
+        }
+        /* Aviso naranja de programación que no se va a ejecutar. Deliberadamente
+           llamativo y arriba del todo: el estado "parece programada pero no lo
+           está" ya ha costado un riego que no se hizo. */
+        .vc-prog-inerte {
+          margin: 8px 0 0;
+          padding: 8px 10px;
+          background: #2a2318;
+          border: 1px solid var(--vc-amber, #e0a458);
+          border-radius: 6px;
+          color: var(--vc-amber, #e0a458);
+          font-size: 11px;
           line-height: 1.4;
         }
         .vc-umbral-inline {
