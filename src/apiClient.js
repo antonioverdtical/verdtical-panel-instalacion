@@ -310,7 +310,12 @@ export async function obtenerBootstrapProyecto() {
     obtenerContactosProyecto(),
     obtenerPlanoProyecto(),
     obtenerProgramasProyecto(),
-    obtenerHistorialDiario(90),
+    // Un año completo, no 90 días: la vista de "historial de 1 año" y la
+    // comparativa mensual existen para ver el gasto de agua a lo largo del
+    // año y cómo cambia con las estaciones, y con 90 días eso no se puede
+    // mirar. El panel ya guarda hasta MAX_DIAS_HISTORICO (365) y el backend
+    // admite hasta 365; era la petición la que se quedaba corta.
+    obtenerHistorialDiario(365),
   ]);
   return { proyecto, lineas, contactos, plano, programas, historialDiario };
 }
