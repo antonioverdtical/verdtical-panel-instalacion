@@ -3189,6 +3189,10 @@ export default function VerdticalControlPanel() {
   const [flowHistory, setFlowHistory] = useState([]);
   const [pressureHistory, setPressureHistory] = useState([]);
   const [dailyConsumption, setDailyConsumption] = useState([]);
+  // ¿Lo que hay en dailyConsumption es el histórico real del backend, o el
+  // inventado de la demo? Arranca en false y solo pasa a true cuando el
+  // bootstrap responde con días de verdad: ante la duda, no sumar.
+  const [historialDiarioEsReal, setHistorialDiarioEsReal] = useState(false);
   // Caudalímetro GENERAL, instalado antes de todas las electroválvulas de
   // línea (a la entrada de la instalación). Sirve para detectar una pérdida
   // de agua que ninguna línea puede ver por su cuenta: rotura en la tubería
@@ -3524,6 +3528,9 @@ export default function VerdticalControlPanel() {
           setDailyConsumption(
             historialDiarioPorDia.map((d) => ({ date: d.date, label: d.label, liters: Math.round(d.total) }))
           );
+          // A partir de aquí el histórico es real, así que sí se puede sumar
+          // al total de hoy (ver totalLitrosHistorico).
+          setHistorialDiarioEsReal(true);
           setSectors((prev) =>
             prev.map((s) => {
               if (!s.lineaBackendId) return s;
@@ -5354,14 +5361,22 @@ export default function VerdticalControlPanel() {
     contadoresGenerales.length > 0
       ? Math.round(contadoresGenerales.reduce((sum, c) => sum + Number(c.litros_hoy || 0), 0))
       : Math.round(sectors.reduce((sum, s) => sum + Number(s.sensors?.litersToday || 0), 0));
-  // Total consumido desde el inicio: suma de todo el histórico diario
-  // guardado (hasta 365 días) más lo que lleva hoy. Si hay datos reales de
-  // Loxone, "dailyConsumption" es histórico de la demo (falso) y no debe
-  // mezclarse con el total real de hoy — se muestra solo lo real.
+  // Total acumulado: el histórico diario guardado más lo que lleva hoy.
+  // Lo que NO se puede hacer es mezclar el histórico inventado de la demo
+  // con litros reales, que daría un total falso. Antes eso se decidía
+  // mirando si había lecturas reales HOY, y con eso una instalación
+  // conectada se quedaba siempre en el total de hoy — aunque su histórico
+  // fuera del backend y perfectamente sumable (ver setHistorialDiarioEsReal).
+  // Son tres casos, no dos:
+  //   histórico real         -> se suma (últimos 90 días, los que pide el bootstrap)
+  //   real hoy, sin histórico -> solo hoy
+  //   demo                   -> se suma el de la demo, que es coherente consigo mismo
   const hayDatosRealesHoy = (lecturasReales?.porPosicion?.length || 0) > 0;
-  const totalLitrosHistorico = hayDatosRealesHoy
-    ? todayTotalLiters
-    : Math.round(dailyConsumption.reduce((sum, d) => sum + Number(d.liters || 0), 0) + todayTotalLiters);
+  const totalConHistorico = Math.round(
+    dailyConsumption.reduce((sum, d) => sum + Number(d.liters || 0), 0) + todayTotalLiters
+  );
+  const totalLitrosHistorico =
+    historialDiarioEsReal || !hayDatosRealesHoy ? totalConHistorico : todayTotalLiters;
   const chartConsumoDiario = [...dailyConsumption, { label: "Hoy", liters: todayTotalLiters, isToday: true }];
   const chartConsumoReciente = chartConsumoDiario.slice(-14);
   // Comparativa mensual: agrupa todo el histórico diario (más lo de hoy) por
@@ -8221,7 +8236,11 @@ export default function VerdticalControlPanel() {
           <button
             className="vc-summary-card vc-summary-card-narrow vc-summary-card-vertical vc-summary-card-btn"
             onClick={() => setShowLitrosChart((v) => !v)}
-            title="Pulsa para ver la gráfica de consumo total"
+            title={
+              historialDiarioEsReal
+                ? "Acumulado de los últimos 90 días más lo que lleva hoy — pulsa para ver la gráfica"
+                : "Pulsa para ver la gráfica de consumo total"
+            }
           >
             <div className="vc-summary-icon-box">
               <MiniAguaIcon active={anyActive} />
