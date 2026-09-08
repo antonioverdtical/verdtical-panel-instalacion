@@ -1396,7 +1396,7 @@ function HorarioRow({ evento, index, onChange, onRemove, canRemove, conflicto })
   );
 }
 
-function SectorCard({ sector, now, mainSupply, maestraCerrada, tecnico, cliente, presionEnRangoTrabajo, presionBaja, presionAlta, balanceHidrico, umbralBalanceHidrico, todosLosSectores, etoSol, etoSemisombra, etoSombra, factoresEstacionales, alarmHistory, alarmasInstalacion, onUpdate, onRemove, onRearm, onRearmFault, guardandoConfig, avisoGuardarConfig, onGuardarConfig }) {
+function SectorCard({ sector, now, mainSupply, maestraCerrada, tecnico, cliente, presionEnRangoTrabajo, presionBaja, presionAlta, balanceHidrico, umbralBalanceHidrico, todosLosSectores, etoSol, etoSemisombra, etoSombra, factoresEstacionales, alarmHistory, alarmasInstalacion, onUpdate, onRemove, onRearm, onRearmFault, guardandoConfig, avisoGuardarConfig, onGuardarConfig, zonasBackend }) {
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [editingSchedule, setEditingSchedule] = useState(false);
   const [showCharts, setShowCharts] = useState(false);
@@ -2562,6 +2562,28 @@ function SectorCard({ sector, now, mainSupply, maestraCerrada, tecnico, cliente,
             ⚠ La presión de red ({presionBaja}–{presionAlta} bar) se comprueba siempre antes de aplicar estos umbrales: con la presión fuera de rango, el
             panel no diagnostica embozo ni fuga en esta línea, para evitar falsos avisos por falta de agua en origen.
           </p>
+          {Array.isArray(zonasBackend) && zonasBackend.length > 0 && (
+            <label className="vc-zona-pareja">
+              Zona real de esta línea
+              <select
+                value={sector.lineaBackendId ?? ""}
+                onChange={(e) =>
+                  onUpdate({ ...sector, lineaBackendId: e.target.value ? Number(e.target.value) : null })
+                }
+              >
+                <option value="">— sin emparejar —</option>
+                {zonasBackend.map((z) => (
+                  <option key={z.id} value={z.id}>
+                    {z.nombre}
+                  </option>
+                ))}
+              </select>
+              <span className="vc-zona-pareja-nota">
+                De aquí salen las lecturas en vivo de esta línea. Si el panel enseña el
+                riego de otra zona, es este emparejamiento el que hay que corregir.
+              </span>
+            </label>
+          )}
           {sector.lineaBackendId && (
             <div className="vc-field-row">
               <button className="vc-plano-btn-sm" disabled={guardandoConfig} onClick={onGuardarConfig}>
@@ -3193,6 +3215,10 @@ export default function VerdticalControlPanel() {
   // inventado de la demo? Arranca en false y solo pasa a true cuando el
   // bootstrap responde con días de verdad: ante la duda, no sumar.
   const [historialDiarioEsReal, setHistorialDiarioEsReal] = useState(false);
+  // Zonas tal como las tiene el backend. Se guardan en estado para que el
+  // técnico pueda VER con qué zona está emparejado cada sector y corregirlo:
+  // hasta ahora ese vínculo se adivinaba y era invisible.
+  const [zonasBackend, setZonasBackend] = useState(null);
   // Caudalímetro GENERAL, instalado antes de todas las electroválvulas de
   // línea (a la entrada de la instalación). Sirve para detectar una pérdida
   // de agua que ninguna línea puede ver por su cuenta: rotura en la tubería
@@ -3270,11 +3296,14 @@ export default function VerdticalControlPanel() {
         }
         const b = backend?.proyecto || {};
         const lineasBackend = backend?.lineas || null;
+        if (mounted && lineasBackend) setZonasBackend(lineasBackend);
         const programasBackend = backend?.programas || null;
         const historialDiarioPorDia = transformarHistorialDiario(backend?.historialDiario);
         const fusionarConBackend = (sectores) =>
           (lineasBackend
-            ? sectores.map((s, i) => fusionarLineaConBackend(s, buscarLineaBackend(lineasBackend, s.name, i)))
+            ? sectores.map((s, i) =>
+                fusionarLineaConBackend(s, buscarLineaBackend(lineasBackend, s.name, i, s.lineaBackendId))
+              )
             : sectores
           ).map((s) => fusionarProgramacionConBackend(s, programasBackend));
         if (mounted && result && result.value) {
@@ -7325,6 +7354,28 @@ export default function VerdticalControlPanel() {
           gap: 8px;
           flex-wrap: wrap;
         }
+        .vc-zona-pareja {
+          display: flex;
+          flex-direction: column;
+          gap: 4px;
+          margin-top: 10px;
+          font-size: 11px;
+          font-weight: 500;
+        }
+        .vc-zona-pareja select {
+          background: var(--vc-panel-2, #223533);
+          color: inherit;
+          border: 1px solid var(--vc-border, #33463f);
+          border-radius: 6px;
+          padding: 6px 8px;
+          font-size: 12px;
+        }
+        .vc-zona-pareja-nota {
+          font-size: 10px;
+          font-weight: 400;
+          color: var(--vc-text-muted, #8fa39e);
+          line-height: 1.4;
+        }
         .vc-thresholds-note {
           font-size: 10px;
           color: var(--vc-amber);
@@ -10618,6 +10669,7 @@ export default function VerdticalControlPanel() {
               guardandoConfig={guardandoConfigLinea === s.id}
               avisoGuardarConfig={avisoGuardarConfigLinea && avisoGuardarConfigLinea.id === s.id ? avisoGuardarConfigLinea : null}
               onGuardarConfig={() => guardarConfigLinea(s)}
+              zonasBackend={zonasBackend}
             />
           );
         })}

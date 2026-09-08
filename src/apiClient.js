@@ -317,8 +317,20 @@ export async function obtenerBootstrapProyecto() {
 
 // Busca la línea del backend que corresponde a un sector del panel: mismo
 // emparejamiento por nombre normalizado, o si no por posición, que buscarLectura.
-export function buscarLineaBackend(lineasBackend, nombreSector, posicion) {
+// Empareja un sector del panel con su línea del backend. Igual que
+// buscarLectura: el id manda, y la posición es el último recurso.
+//
+// Que el id vaya primero es lo que hace estable el emparejamiento. Antes,
+// un sector cuyo nombre no casara se re-emparejaba por posición en CADA
+// arranque: añadir o borrar una zona desplazaba a todos los sectores
+// siguientes, en silencio y sin que nada lo delatara en pantalla.
+export function buscarLineaBackend(lineasBackend, nombreSector, posicion, lineaBackendId) {
   if (!Array.isArray(lineasBackend)) return null;
+  if (lineaBackendId != null) {
+    // Si la zona emparejada ya no existe se devuelve null, no un sustituto:
+    // el selector la mostrará como "sin emparejar", que es la verdad.
+    return lineasBackend.find((l) => l.id === lineaBackendId) || null;
+  }
   const porNombre = lineasBackend.find((l) => normalizar(l.nombre) === normalizar(nombreSector));
   if (porNombre) return porNombre;
   if (typeof posicion === 'number') return lineasBackend[posicion] || null;
