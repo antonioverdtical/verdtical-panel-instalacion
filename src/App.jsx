@@ -3266,7 +3266,15 @@ export default function VerdticalControlPanel() {
     telefono: "",
     email: "",
     emailAvisos: "",
-    alarmas: { fugas: true, fallo_electrico: true, embozo: true, presion: true, humedad: true, ec: true, temperatura: true, multiples_lineas: true, fertilizante: true, maestra: true, corte_corriente: true, sin_datos: true, sin_agua: true },
+    // Una instalación nueva nace avisando SOLO de presión y de corte de
+    // corriente en el PLC. Las demás se marcan cuando esa instalación esté
+    // ajustada y se sepa qué es normal en ella.
+    //
+    // Antes venían todas marcadas y el resultado era ruido: Urquinaona
+    // generó 611 alarmas de presión alta en 29 horas por un umbral que no
+    // era el suyo. Cientos de avisos falsos no molestan, entierran: cuando
+    // llegue la alarma de verdad estará entre las otras seiscientas.
+    alarmas: { fugas: false, fallo_electrico: false, embozo: false, presion: true, humedad: false, ec: false, temperatura: false, multiples_lineas: false, fertilizante: false, maestra: false, corte_corriente: true, sin_datos: false, sin_agua: false },
   });
   const [cliente, setCliente] = useState({
     nombre: "",
