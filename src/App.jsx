@@ -1341,7 +1341,7 @@ function MiniAguaIcon({ active, danger }) {
 // tocar en el bloque de configuración, por debajo de toda la programación, que
 // obliga a un scroll largo y deja el dato que justifica el cambio fuera de la
 // pantalla. Los dos sitios editan el mismo estado y se mantienen sincronizados.
-function UmbralesInline({ unidad, paso = 1, min, max, onMin, onMax, onGuardar, guardando, aviso }) {
+function UmbralesInline({ unidad, paso = 1, min, max, onMin, onMax, onGuardar, guardando, aviso, nota }) {
   const num = (v) => (v === "" ? undefined : Number(v));
   return (
     <div className="vc-umbral-inline">
@@ -1370,6 +1370,7 @@ function UmbralesInline({ unidad, paso = 1, min, max, onMin, onMax, onGuardar, g
       {aviso && (
         <span style={{ fontSize: 10, color: aviso.ok ? "var(--vc-flow)" : "var(--vc-red)" }}>{aviso.mensaje}</span>
       )}
+      {nota && <span className="vc-umbral-inline-nota">{nota}</span>}
     </div>
   );
 }
@@ -2034,6 +2035,20 @@ function SectorCard({ sector, now, mainSupply, maestraCerrada, tecnico, cliente,
             height={200}
             umbralMin={nominalFlow > 0 ? Math.round(nominalFlow * ((th.flowMinPercent ?? 85) / 100)) : undefined}
             umbralMax={nominalFlow > 0 ? Math.round(nominalFlow * ((th.flowMaxPercent ?? 115) / 100)) : undefined}
+          />
+          <UmbralesInline
+            unidad="% del nominal"
+            paso={1}
+            min={th.flowMinPercent}
+            max={th.flowMaxPercent}
+            onMin={(v) => setUmbral("flowMinPercent", v)}
+            onMax={(v) => setUmbral("flowMaxPercent", v)}
+            nota={
+              nominalFlow > 0
+                ? `Por debajo del mínimo se avisa de embozo; por encima del máximo, de fuga. Sobre los ${nominalFlow} L/h nominales de esta línea son ${Math.round((nominalFlow * (th.flowMinPercent ?? 85)) / 100)}–${Math.round((nominalFlow * (th.flowMaxPercent ?? 115)) / 100)} L/h.`
+                : "Por debajo del mínimo se avisa de embozo; por encima del máximo, de fuga. Rellena emisores y caudal por emisor para ver el equivalente en L/h."
+            }
+            {...propsGuardarUmbral}
           />
           <button className="vc-toggle-btn vc-annual-toggle" onClick={() => setShowFlowYearFull((v) => !v)}>
             {showFlowYearFull ? "ocultar historial de 1 año" : `ver historial de 1 año (${flowChartAnual.length} días, media diaria)`}
@@ -7570,6 +7585,12 @@ export default function VerdticalControlPanel() {
           border-radius: 5px;
           padding: 4px 6px;
           font-size: 12px;
+        }
+        .vc-umbral-inline-nota {
+          flex-basis: 100%;
+          font-size: 10px;
+          line-height: 1.4;
+          color: var(--vc-text-muted, #8fa39e);
         }
         .vc-umbral-inline-btn {
           margin-left: auto;
