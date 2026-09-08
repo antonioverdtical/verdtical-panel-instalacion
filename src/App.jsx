@@ -1579,13 +1579,24 @@ function SectorCard({ sector, now, mainSupply, maestraCerrada, tecnico, cliente,
   const flowOk = !presionImpideDiagnostico && active && nominalFlow > 0 && !clogWarn && !leakLeveWarn && !leakGraveWarn;
   const flowWarn = clogWarn || leakLeveWarn || leakGraveWarn;
 
+  // Toda edición de horarios pasa por aquí para marcar la temporada como NO
+  // guardada. Sin esto, editar después de haber guardado dejaba el cartel en
+  // "✓ guardada" mientras el cambio seguía solo en el navegador: exactamente
+  // la confusión que el aviso pretendía evitar.
+  const aplicarEventos = (nuevos) => {
+    onUpdate({
+      ...sector,
+      schedules: { ...schedules, [editingSeason]: nuevos },
+      schedulesGuardadas: { ...(sector.schedulesGuardadas || {}), [editingSeason]: false },
+    });
+  };
+
   const updateEvento = (idx, updated) => {
-    const nuevos = eventos.map((ev, i) => (i === idx ? updated : ev));
-    onUpdate({ ...sector, schedules: { ...schedules, [editingSeason]: nuevos } });
+    aplicarEventos(eventos.map((ev, i) => (i === idx ? updated : ev)));
   };
 
   const removeEvento = (idx) => {
-    onUpdate({ ...sector, schedules: { ...schedules, [editingSeason]: eventos.filter((_, i) => i !== idx) } });
+    aplicarEventos(eventos.filter((_, i) => i !== idx));
   };
 
   const addEvento = () => {
@@ -1598,7 +1609,7 @@ function SectorCard({ sector, now, mainSupply, maestraCerrada, tecnico, cliente,
       horaNueva = `${String(siguienteHora).padStart(2, "0")}:${String(m).padStart(2, "0")}`;
     }
     const nuevos = [...eventos, nuevoHorario(last ? { time: horaNueva, days: [...last.days] } : {})];
-    onUpdate({ ...sector, schedules: { ...schedules, [editingSeason]: nuevos } });
+    aplicarEventos(nuevos);
   };
 
   // Guarda de golpe todos los eventos de la temporada que se está editando
@@ -2443,8 +2454,19 @@ function SectorCard({ sector, now, mainSupply, maestraCerrada, tecnico, cliente,
 
           {sector.lineaBackendId && (
             <div className="vc-manual-block" style={{ marginTop: "6px" }}>
-              <button className="vc-manual-start" onClick={guardarProgramacion} disabled={guardandoProgramacion}>
-                {guardandoProgramacion ? "guardando…" : "Guardar programación"}
+              <button
+                className={
+                  "vc-manual-start" +
+                  (sector.schedulesGuardadas?.[editingSeason] ? "" : " vc-guardar-prog-pendiente")
+                }
+                onClick={guardarProgramacion}
+                disabled={guardandoProgramacion}
+              >
+                {guardandoProgramacion
+                  ? "guardando…"
+                  : sector.schedulesGuardadas?.[editingSeason]
+                    ? "Guardar programación"
+                    : "⚠ Guardar programación"}
               </button>
               <span
                 className="vc-tecnico-hint"
@@ -7131,6 +7153,27 @@ export default function VerdticalControlPanel() {
           font-size: 12px;
           font-weight: 500;
           cursor: pointer;
+        }
+        /* Programación editada y todavía sin enviar al servidor: el botón deja
+           de parecer un botón más y pasa a ámbar, con un latido suave. El
+           aviso de texto de al lado ya lo decía, pero es fácil no leerlo
+           cuando lo que acabas de hacer parece que ya está hecho. */
+        .vc-guardar-prog-pendiente {
+          background: var(--vc-amber, #e0a458);
+          color: #2a2318;
+          font-weight: 700;
+          box-shadow: 0 0 0 0 rgba(224, 164, 88, 0.7);
+          animation: vc-latido-guardar 2s ease-out infinite;
+        }
+        @keyframes vc-latido-guardar {
+          0% { box-shadow: 0 0 0 0 rgba(224, 164, 88, 0.7); }
+          70% { box-shadow: 0 0 0 7px rgba(224, 164, 88, 0); }
+          100% { box-shadow: 0 0 0 0 rgba(224, 164, 88, 0); }
+        }
+        /* Respeta a quien tenga desactivadas las animaciones en su sistema:
+           el color ámbar ya distingue el estado por sí solo. */
+        @media (prefers-reduced-motion: reduce) {
+          .vc-guardar-prog-pendiente { animation: none; }
         }
         .vc-manual-start:disabled {
           opacity: 0.4;
