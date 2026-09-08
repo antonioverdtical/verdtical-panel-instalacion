@@ -114,6 +114,17 @@ function fusionarProgramacionConBackend(sector, programasBackend) {
   return { ...sector, schedules, schedulesGuardadas };
 }
 
+// Regenerar la programación automática deja TODAS las temporadas sin guardar:
+// lo que hay en el servidor sigue siendo lo anterior hasta que se pulse
+// guardar en cada una. Sin esto, una línea ya guardada antes se quedaba con el
+// botón azul de "guardada" mientras enseñaba horarios nuevos que el riego
+// automático no conocía — pasó en Zona1 de Galileo.
+function marcarTemporadasSinGuardar(schedules) {
+  const marcas = {};
+  for (const temporada of Object.keys(schedules || {})) marcas[temporada] = false;
+  return marcas;
+}
+
 function escalarHorarios(eventos, factor) {
   return eventos.map((ev) => ({
     ...ev,
@@ -2485,7 +2496,11 @@ function SectorCard({ sector, now, mainSupply, maestraCerrada, tecnico, cliente,
                     ocupacionPorEstacion,
                     factoresEstacionales,
                   });
-                  onUpdate({ ...sector, schedules: nuevosSchedules });
+                  onUpdate({
+                    ...sector,
+                    schedules: nuevosSchedules,
+                    schedulesGuardadas: marcarTemporadasSinGuardar(nuevosSchedules),
+                  });
                   const conflictosTotales = Object.values(resumenPorEstacion).reduce((sum, r) => sum + r.conflictosSinResolver, 0);
                   if (conflictosTotales > 0) {
                     setAvisoConflictoHorario(
@@ -5443,7 +5458,11 @@ export default function VerdticalControlPanel() {
         });
       });
 
-      return { ...s, schedules: nuevosSchedules };
+      return {
+        ...s,
+        schedules: nuevosSchedules,
+        schedulesGuardadas: marcarTemporadasSinGuardar(nuevosSchedules),
+      };
     });
 
     setSectors(nuevosSectores);
