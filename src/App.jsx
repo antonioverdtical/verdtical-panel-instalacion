@@ -1325,6 +1325,44 @@ function MiniAguaIcon({ active, danger }) {
   );
 }
 
+// Editor de umbrales pegado a la gráfica del propio sensor: la misma línea de
+// aviso que se ve dibujada es la que se ajusta aquí. Hasta ahora solo se podían
+// tocar en el bloque de configuración, por debajo de toda la programación, que
+// obliga a un scroll largo y deja el dato que justifica el cambio fuera de la
+// pantalla. Los dos sitios editan el mismo estado y se mantienen sincronizados.
+function UmbralesInline({ unidad, paso = 1, min, max, onMin, onMax, onGuardar, guardando, aviso }) {
+  const num = (v) => (v === "" ? undefined : Number(v));
+  return (
+    <div className="vc-umbral-inline">
+      <span className="vc-umbral-inline-txt">Avisar si sale de</span>
+      <input
+        className="vc-umbral-inline-input"
+        type="number"
+        step={paso}
+        value={min ?? ""}
+        onChange={(e) => onMin(num(e.target.value))}
+      />
+      <span className="vc-umbral-inline-txt">a</span>
+      <input
+        className="vc-umbral-inline-input"
+        type="number"
+        step={paso}
+        value={max ?? ""}
+        onChange={(e) => onMax(num(e.target.value))}
+      />
+      <span className="vc-umbral-inline-txt">{unidad}</span>
+      {onGuardar && (
+        <button className="vc-umbral-inline-btn" onClick={onGuardar} disabled={guardando}>
+          {guardando ? "guardando…" : "guardar"}
+        </button>
+      )}
+      {aviso && (
+        <span style={{ fontSize: 10, color: aviso.ok ? "var(--vc-flow)" : "var(--vc-red)" }}>{aviso.mensaje}</span>
+      )}
+    </div>
+  );
+}
+
 function SensorStat({ label, value, unit, warn, wide, onClick, active, iconoAgua, lineaActiva }) {
   const clases = `vc-sensor${warn ? " vc-sensor-warn" : ""}${wide ? " vc-sensor-wide" : ""}${onClick ? " vc-sensor-clickable" : ""}${
     active ? " vc-sensor-active" : ""
@@ -1459,6 +1497,14 @@ function SectorCard({ sector, now, mainSupply, maestraCerrada, tecnico, cliente,
   const nominalFlow = Number(sector.emitters || 0) * Number(sector.emitterFlow || 0);
   const sensors = sector.sensors || { humidity: 0, temperature: 0, ec: 0, flowMeasured: 0, litersToday: 0 };
   const th = sector.thresholds || { humidityMin: 30, humidityMax: 65, ecMin: 1.2, ecMax: 2.4 };
+  const setUmbral = (campo, valor) => onUpdate({ ...sector, thresholds: { ...th, [campo]: valor } });
+  // El botón de guardar solo tiene sentido con línea emparejada: sin ella no
+  // hay a qué línea del backend mandar los umbrales.
+  const propsGuardarUmbral = {
+    onGuardar: sector.lineaBackendId ? onGuardarConfig : undefined,
+    guardando: guardandoConfig,
+    aviso: avisoGuardarConfig,
+  };
   const schedules = sector.schedules || {};
   const activeSeason = getSeasonForDate(now);
   const activeEventos = schedules[activeSeason] || [];
@@ -1813,6 +1859,15 @@ function SectorCard({ sector, now, mainSupply, maestraCerrada, tecnico, cliente,
             umbralMin={th.humidityMin}
             umbralMax={th.humidityMax}
           />
+          <UmbralesInline
+            unidad={"%"}
+            paso={1}
+            min={th.humidityMin}
+            max={th.humidityMax}
+            onMin={(v) => setUmbral("humidityMin", v)}
+            onMax={(v) => setUmbral("humidityMax", v)}
+            {...propsGuardarUmbral}
+          />
           <button className="vc-toggle-btn vc-annual-toggle" onClick={() => setShowHumidityYearFull((v) => !v)}>
             {showHumidityYearFull
               ? "ocultar historial de 1 año"
@@ -1856,6 +1911,15 @@ function SectorCard({ sector, now, mainSupply, maestraCerrada, tecnico, cliente,
             umbralMin={th.temperatureMin}
             umbralMax={th.temperatureMax}
           />
+          <UmbralesInline
+            unidad={"°C"}
+            paso={1}
+            min={th.temperatureMin}
+            max={th.temperatureMax}
+            onMin={(v) => setUmbral("temperatureMin", v)}
+            onMax={(v) => setUmbral("temperatureMax", v)}
+            {...propsGuardarUmbral}
+          />
           <button className="vc-toggle-btn vc-annual-toggle" onClick={() => setShowTemperatureYearFull((v) => !v)}>
             {showTemperatureYearFull
               ? "ocultar historial de 1 año"
@@ -1898,6 +1962,15 @@ function SectorCard({ sector, now, mainSupply, maestraCerrada, tecnico, cliente,
             height={200}
             umbralMin={th.ecMin}
             umbralMax={th.ecMax}
+          />
+          <UmbralesInline
+            unidad={"mS/cm"}
+            paso={0.1}
+            min={th.ecMin}
+            max={th.ecMax}
+            onMin={(v) => setUmbral("ecMin", v)}
+            onMax={(v) => setUmbral("ecMax", v)}
+            {...propsGuardarUmbral}
           />
           <button className="vc-toggle-btn vc-annual-toggle" onClick={() => setShowEcYearFull((v) => !v)}>
             {showEcYearFull ? "ocultar historial de 1 año" : `ver historial de 1 año (${ecChartAnual.length} días, media diaria)`}
@@ -7418,6 +7491,44 @@ export default function VerdticalControlPanel() {
           font-weight: 400;
           color: var(--vc-text-muted, #8fa39e);
           line-height: 1.4;
+        }
+        .vc-umbral-inline {
+          display: flex;
+          align-items: center;
+          flex-wrap: wrap;
+          gap: 6px;
+          margin: 8px 0 2px;
+          padding: 7px 9px;
+          background: var(--vc-panel-2, #223533);
+          border: 1px solid var(--vc-border, #33463f);
+          border-radius: 6px;
+        }
+        .vc-umbral-inline-txt {
+          font-size: 11px;
+          color: var(--vc-text-muted, #8fa39e);
+        }
+        .vc-umbral-inline-input {
+          width: 62px;
+          background: var(--vc-panel, #1b2b2a);
+          color: inherit;
+          border: 1px solid var(--vc-border, #33463f);
+          border-radius: 5px;
+          padding: 4px 6px;
+          font-size: 12px;
+        }
+        .vc-umbral-inline-btn {
+          margin-left: auto;
+          background: transparent;
+          border: 1px solid var(--vc-flow, #4fb6c4);
+          color: var(--vc-flow, #4fb6c4);
+          border-radius: 5px;
+          padding: 4px 9px;
+          font-size: 11px;
+          cursor: pointer;
+        }
+        .vc-umbral-inline-btn:disabled {
+          opacity: 0.4;
+          cursor: default;
         }
         .vc-thresholds-note {
           font-size: 10px;
