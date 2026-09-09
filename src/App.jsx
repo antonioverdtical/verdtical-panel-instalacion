@@ -3396,6 +3396,10 @@ export default function VerdticalControlPanel() {
   const [showEtoConfig, setShowEtoConfig] = useState(false);
   const etoDropdownRef = useRef(null);
   const [showDuracionTandaConfig, setShowDuracionTandaConfig] = useState(false);
+  // Valor para aplicar de una vez a todas las líneas. Lo normal es querer la
+  // misma tanda en toda la instalación y ajustar después alguna suelta, no ir
+  // casilla por casilla desde el principio.
+  const [duracionTandaTodas, setDuracionTandaTodas] = useState(25);
   const [firmaDataUrl, setFirmaDataUrl] = useState(null);
   const [firmaFecha, setFirmaFecha] = useState(null);
   const firmaCanvasRef = useRef(null);
@@ -8533,6 +8537,33 @@ export default function VerdticalControlPanel() {
               {showDuracionTandaConfig && (
                 <div className="vc-alarm-dropdown vc-dropdown-centered">
                   <div className="vc-history-title" style={{ marginBottom: 4 }}>Duración de tanda por línea (minutos)</div>
+                  <div className="vc-field-row" style={{ alignItems: "center", marginBottom: 8 }}>
+                    <label style={{ fontSize: 11 }}>
+                      Todas las líneas
+                      <input
+                        type="number"
+                        step="1"
+                        min="1"
+                        style={{ width: 60, marginLeft: 6 }}
+                        value={duracionTandaTodas}
+                        onChange={(e) => setDuracionTandaTodas(Math.max(1, Number(e.target.value) || 1))}
+                      />
+                    </label>
+                    <button
+                      className="vc-cliente-save-btn"
+                      onClick={() => {
+                        const v = Math.max(1, Number(duracionTandaTodas) || 1);
+                        setSectors((prev) => prev.map((s) => ({ ...s, duracionTandaAuto: v })));
+                      }}
+                    >
+                      aplicar a todas
+                    </button>
+                  </div>
+                  <p className="vc-tecnico-hint" style={{ margin: "0 0 8px" }}>
+                    Cambia la tanda de todas de golpe; luego puedes retocar una suelta abajo.
+                    Después hay que volver a generar la programación automática para que el
+                    cambio se note.
+                  </p>
                   <div className="vc-riego-log">
                     {sectors.map((s) => (
                       <div className="vc-riego-log-item" key={s.id}>
