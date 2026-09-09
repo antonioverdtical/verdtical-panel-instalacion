@@ -5431,15 +5431,57 @@ export default function VerdticalControlPanel() {
     reader.readAsDataURL(file);
   };
 
+  // La posición en el plano se guarda en el servidor en cuanto se coloca, sin
+  // botón de por medio: colocar un sensor es un gesto que ya parece
+  // definitivo, y nadie va a ir después a cada línea a pulsar "guardar".
+  //
+  // Las columnas plano_pos_x/plano_pos_y existen en lineas desde hace tiempo y
+  // el PUT ya las aceptaba, pero guardarConfigLinea no las mandaba: las
+  // posiciones vivían solo en el navegador y se perdían al cambiar de móvil,
+  // al borrar los datos del sitio o —como pasó en Jarcia— al cambiar de
+  // dominio. En el servidor estaban las ocho vacías.
+  const guardarPosicionPlano = async (sector, posicion) => {
+    if (!sector?.lineaBackendId) return;
+    // Quitar un sensor necesita la bandera: el PUT usa COALESCE, así que un
+    // null a secas significa "no lo toques" y la posición vieja sobreviviría.
+    const r = await guardarLineaBackend(
+      sector.lineaBackendId,
+      posicion
+        ? { plano_pos_x: posicion.x, plano_pos_y: posicion.y }
+        : { limpiar_plano: true }
+    );
+    if (!r.ok) {
+      setAvisoGuardarConfigLinea({
+        id: sector.id,
+        ok: false,
+        mensaje: `la posición no se guardó en el servidor: ${r.error}`,
+      });
+    }
+  };
+
   const colocarLineaEnPlano = (sectorId, xPct, yPct) => {
+    let sector = null;
     setSectors((prev) =>
-      prev.map((s) => (s.id === sectorId ? { ...s, posicionPlano: { x: xPct, y: yPct } } : s))
+      prev.map((s) => {
+        if (s.id !== sectorId) return s;
+        sector = s;
+        return { ...s, posicionPlano: { x: xPct, y: yPct } };
+      })
     );
     setLineaColocando(null);
+    guardarPosicionPlano(sector, { x: xPct, y: yPct });
   };
 
   const quitarLineaDePlano = (sectorId) => {
-    setSectors((prev) => prev.map((s) => (s.id === sectorId ? { ...s, posicionPlano: null } : s)));
+    let sector = null;
+    setSectors((prev) =>
+      prev.map((s) => {
+        if (s.id !== sectorId) return s;
+        sector = s;
+        return { ...s, posicionPlano: null };
+      })
+    );
+    guardarPosicionPlano(sector, null);
   };
 
   const [resumenProgramacionGlobal, setResumenProgramacionGlobal] = useState(null);
