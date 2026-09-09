@@ -1323,6 +1323,25 @@ function StatusDot({ active, mode }) {
   );
 }
 
+// La chincheta que va delante del nombre de la instalación. Verde: está
+// mandando datos. Roja: lleva más de diez minutos callada. Es el mismo estado
+// que el botón "sin señal" de la derecha, puesto donde primero se mira.
+function PinInstalacion({ conSenal }) {
+  const color = conSenal ? "var(--vc-open)" : "var(--vc-red)";
+  return (
+    <svg width="13" height="17" viewBox="0 0 12 16" style={{ flexShrink: 0, overflow: "visible" }} aria-hidden="true">
+      <path
+        d="M6 0.6 C 9 0.6, 11.4 3, 11.4 6 C 11.4 9.6, 6 15.4, 6 15.4 C 6 15.4, 0.6 9.6, 0.6 6 C 0.6 3, 3 0.6, 6 0.6 Z"
+        fill={color}
+        stroke="#12201f"
+        strokeWidth="0.8"
+        style={{ transition: "fill 0.3s ease" }}
+      />
+      <circle cx="6" cy="5.9" r="1.9" fill="#0a1413" />
+    </svg>
+  );
+}
+
 function Co2LeafIcon() {
   return (
     <svg width="24" height="34" viewBox="0 0 14 20" style={{ flexShrink: 0, overflow: "visible" }}>
@@ -6038,6 +6057,9 @@ export default function VerdticalControlPanel() {
           cursor: pointer;
           padding: 0;
           text-align: left;
+          display: inline-flex;
+          align-items: center;
+          gap: 7px;
         }
         .vc-proyecto-fecha-row {
           display: flex;
@@ -8424,8 +8446,16 @@ export default function VerdticalControlPanel() {
           <div>
             <p className="vc-title">Verdtical · sistema de riego inteligente</p>
             <div className="vc-proyecto-fecha-row">
-              <button className="vc-proyecto-btn" onClick={() => setShowProyectoConfig((v) => !v)}>
-                📍 {proyecto.nombre || "Verdtical"}
+              <button
+                className="vc-proyecto-btn"
+                onClick={() => setShowProyectoConfig((v) => !v)}
+                title={
+                  instalacionSinSenal
+                    ? "Chincheta roja: la instalación lleva más de 10 minutos sin mandar datos. Pulsa para ver los datos de la instalación."
+                    : "Chincheta verde: la instalación está mandando datos con normalidad. Pulsa para ver los datos de la instalación."
+                }
+              >
+                <PinInstalacion conSenal={!instalacionSinSenal} /> {proyecto.nombre || "Verdtical"}
               </button>
               <span className="vc-fecha-inline">
                 {now.toLocaleDateString("es-ES", { weekday: "long", day: "2-digit", month: "short" })} · {pad2(now.getHours())}:{pad2(now.getMinutes())}
