@@ -389,6 +389,20 @@ function fusionarLineaConBackend(s, l) {
   const th = s.thresholds || {};
   return {
     ...s,
+    // El nombre lo pone Loxone, no el panel. Es la única excepción al "local
+    // manda" de este merge, y por un motivo concreto: ese nombre es la clave
+    // con la que la sincronización empareja las líneas (ON CONFLICT
+    // (proyecto_id, nombre)), así que es el nombre real de la zona.
+    //
+    // Tener dos nombres para lo mismo —"Línea 2" en el panel, "Zona2" en
+    // Loxone y en el CRM— no rompe nada desde que el emparejamiento va por id,
+    // pero confunde a quien mira las dos pantallas a la vez: diagnosticar una
+    // avería con un nombre en cada sitio costó media tarde.
+    //
+    // Las instalaciones nuevas ya nacen con el nombre de Loxone (ver
+    // construirSectorDesdeLineaBackend); esto arregla las que existían como
+    // sectores locales antes de emparejarse.
+    name: l.nombre || s.name,
     thresholds: {
       ...th,
       humidityMin: th.humidityMin ?? l.umbral_humedad_min ?? undefined,
