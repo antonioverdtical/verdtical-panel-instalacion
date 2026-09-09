@@ -2506,7 +2506,23 @@ function SectorCard({ sector, now, mainSupply, maestraCerrada, tecnico, cliente,
 
       {editingSchedule && (
         <div className="vc-schedule-editor">
-          {sector.areaM2 > 0 && (
+          {/* La programación automática necesita superficie y caudal nominal
+              para calcular cuánto regar. Antes, sin ellos, el bloque entero
+              desaparecía sin explicación: en Jarcia, Zona7 y Zona8 no ofrecían
+              la opción y no había forma de saber por qué. Ahora se dice qué
+              falta y dónde ponerlo. */}
+          {!(sector.areaM2 > 0 && Number(sector.emitters || 0) * Number(sector.emitterFlow || 0) > 0) && (
+            <p className="vc-thresholds-note">
+              ⚠ Sin programación automática:{" "}
+              {!(sector.areaM2 > 0) && "falta la superficie de la línea"}
+              {!(sector.areaM2 > 0) && !(Number(sector.emitters || 0) * Number(sector.emitterFlow || 0) > 0) && " y "}
+              {!(Number(sector.emitters || 0) * Number(sector.emitterFlow || 0) > 0) &&
+                "faltan los emisores o su caudal"}
+              . Se rellenan más abajo, en los ajustes de la línea, y hay que pulsar
+              «guardar umbrales en el servidor» para que no se pierdan.
+            </p>
+          )}
+          {sector.areaM2 > 0 && Number(sector.emitters || 0) * Number(sector.emitterFlow || 0) > 0 && (
             <div className="vc-auto-programa">
               <label className="vc-auto-duracion-label">
                 Duración de cada tanda (min)
