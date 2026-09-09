@@ -5402,7 +5402,48 @@ export default function VerdticalControlPanel() {
   const guardarAlarmasInstalacion = async () => {
     setGuardandoAlarmasInstalacion(true);
     setAvisoAlarmasInstalacion(null);
-    const resultado = await guardarAjustesProyecto({ alarmas_activas: alarmasInstalacion });
+    // Se manda TODA la configuración de la instalación, no solo las alarmas.
+    // Antes solo viajaba alarmas_activas: los umbrales de presión, la ETo, los
+    // factores estacionales, el fertilizante y los tiempos sostenidos se leían
+    // del servidor pero no se escribían nunca. Y como localStorage manda al
+    // cargar, el valor editado tapaba al del servidor en ESE navegador — así
+    // que el panel enseñaba una cosa y el worker evaluaba otra. Fue lo que
+    // pasó en Urquinaona: umbral cambiado en pantalla, 611 alarmas generadas
+    // con el viejo.
+    const resultado = await guardarAjustesProyecto({
+      alarmas_activas: alarmasInstalacion,
+      presion_bar: pressureBar,
+      presion_sin_agua: presionSinAgua,
+      presion_baja: presionBaja,
+      presion_alta: presionAlta,
+      presion_escala_max: presionEscalaMax,
+      presion_horas_sin_agua: presionHorasSinAgua,
+      presion_horas_baja: presionHorasBaja,
+      presion_horas_alta: presionHorasAlta,
+      eto_sol: etoSol,
+      eto_semisombra: etoSemisombra,
+      eto_sombra: etoSombra,
+      factor_primavera: factoresEstacionales.primavera,
+      factor_verano: factoresEstacionales.verano,
+      factor_otono: factoresEstacionales.otono,
+      factor_invierno: factoresEstacionales.invierno,
+      umbral_balance_hidrico: umbralBalanceHidrico,
+      wue_gramos_por_litro: wueGramosPorLitro,
+      fertilizante_tanque_l: fertilizerTanqueL,
+      fertilizante_dosis_ml_por_litro: fertilizerDosisMlPorLitro,
+      fertilizante_umbral_bajo: fertilizanteUmbralBajo,
+      fertilizante_umbral_agotado: fertilizanteUmbralAgotado,
+      fertilizante_horas_sostenidas: fertilizanteHorasSostenidas,
+      rotura_colector_litros_hora: roturaColectorLitrosHora,
+      rotura_colector_horas_sostenidas: roturaColectorHorasSostenidas,
+      multiples_lineas_umbral: multiplesLineasUmbral,
+      multiples_lineas_horas_sostenidas: multiplesLineasHorasSostenidas,
+      bateria_umbral_baja: bateriaUmbralBaja,
+      bateria_autonomia_horas: bateriaAutonomiaHoras,
+      corte_corriente_horas_sostenidas: corteCorrienteHorasSostenidas,
+      fuga_leve_horas_sostenidas: fugaLeveHorasSostenidas,
+      embozo_horas_sostenidas: embozoHorasSostenidas,
+    });
     setGuardandoAlarmasInstalacion(false);
     setAvisoAlarmasInstalacion(
       resultado.ok ? "guardado en el servidor ✓" : `no se pudo guardar: ${resultado.error}`
