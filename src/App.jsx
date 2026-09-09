@@ -5406,8 +5406,58 @@ export default function VerdticalControlPanel() {
     setHistory((h) => [{ ts: new Date().toISOString(), text: `${lineName}: electroválvula rearmada manualmente` }, ...h].slice(0, 20));
   };
 
+  // Campos de la línea que viven en el servidor. Cambiar cualquiera de ellos
+  // dispara un guardado; el resto del sector (horarios, banderas, lecturas
+  // simuladas) no toca el servidor.
+  const camposServidorDeLinea = (s) => ({
+    superficie_m2: s.areaM2 ?? null,
+    exposicion: s.exposicion || null,
+    num_difusores: s.emitters ?? null,
+    caudal_difusor_lh: s.emitterFlow ?? null,
+    umbral_humedad_min: s.thresholds?.humidityMin ?? null,
+    umbral_humedad_max: s.thresholds?.humidityMax ?? null,
+    umbral_ec_min: s.thresholds?.ecMin ?? null,
+    umbral_ec_max: s.thresholds?.ecMax ?? null,
+    umbral_temperatura_min: s.thresholds?.temperatureMin ?? null,
+    umbral_temperatura_max: s.thresholds?.temperatureMax ?? null,
+    umbral_caudal_min_pct: s.thresholds?.flowMinPercent ?? null,
+    umbral_caudal_max_pct: s.thresholds?.flowMaxPercent ?? null,
+  });
+
+  // Guardado automático de la configuración de línea.
+  //
+  // Se hace SOLO desde updateSector, que es la vía por la que el usuario edita.
+  // La fusión con el backend al cargar usa setSectors directamente y no pasa
+  // por aquí — esa distinción es lo que hace seguro esto. Un intento anterior
+  // guardaba al abrir el panel y pisaba la configuración buena del servidor con
+  // lo que hubiera quedado en ese navegador (le pasó a Cubierta Galileo), y por
+  // eso se había vuelto al botón manual.
+  //
+  // Además solo se manda si alguno de los campos del servidor ha cambiado de
+  // verdad: mover un horario o abrir un riego no escriben nada.
+  const guardadoLineaRef = useRef({});
   const updateSector = (id, updated) => {
-    setSectors((prev) => prev.map((s) => (s.id === id ? updated : s)));
+    setSectors((prev) => {
+      const anterior = prev.find((s) => s.id === id);
+      const siguiente = prev.map((s) => (s.id === id ? updated : s));
+      if (anterior && updated.lineaBackendId) {
+        const antes = JSON.stringify(camposServidorDeLinea(anterior));
+        const ahora = JSON.stringify(camposServidorDeLinea(updated));
+        if (antes !== ahora) {
+          clearTimeout(guardadoLineaRef.current[id]);
+          // Un respiro antes de mandar: escribir un número en una casilla
+          // dispara un cambio por tecla, y no hace falta una petición por letra.
+          guardadoLineaRef.current[id] = setTimeout(() => {
+            guardarLineaBackend(updated.lineaBackendId, camposServidorDeLinea(updated)).then((r) => {
+              if (!r.ok) {
+                setAvisoGuardarConfigLinea({ id, ok: false, mensaje: `no se pudo guardar: ${r.error}` });
+              }
+            });
+          }, 1200);
+        }
+      }
+      return siguiente;
+    });
   };
 
   const [guardandoConfigLinea, setGuardandoConfigLinea] = useState(null);
@@ -5453,51 +5503,78 @@ export default function VerdticalControlPanel() {
   // "guardar en el servidor" (guardarConfigLinea) hasta tener una versión
   // seguraque no pueda sobreescribir a ciegas con datos obsoletos.
 
+  // Todos los ajustes de la instalación, en un solo sitio, para poder
+  // compararlos y mandarlos sin repetir la lista en dos lugares.
+  const ajustesInstalacion = () => ({
+    alarmas_activas: alarmasInstalacion,
+    presion_bar: pressureBar,
+    presion_sin_agua: presionSinAgua,
+    presion_baja: presionBaja,
+    presion_alta: presionAlta,
+    presion_escala_max: presionEscalaMax,
+    presion_horas_sin_agua: presionHorasSinAgua,
+    presion_horas_baja: presionHorasBaja,
+    presion_horas_alta: presionHorasAlta,
+    eto_sol: etoSol,
+    eto_semisombra: etoSemisombra,
+    eto_sombra: etoSombra,
+    factor_primavera: factoresEstacionales.primavera,
+    factor_verano: factoresEstacionales.verano,
+    factor_otono: factoresEstacionales.otono,
+    factor_invierno: factoresEstacionales.invierno,
+    umbral_balance_hidrico: umbralBalanceHidrico,
+    wue_gramos_por_litro: wueGramosPorLitro,
+    fertilizante_tanque_l: fertilizerTanqueL,
+    fertilizante_dosis_ml_por_litro: fertilizerDosisMlPorLitro,
+    fertilizante_umbral_bajo: fertilizanteUmbralBajo,
+    fertilizante_umbral_agotado: fertilizanteUmbralAgotado,
+    fertilizante_horas_sostenidas: fertilizanteHorasSostenidas,
+    rotura_colector_litros_hora: roturaColectorLitrosHora,
+    rotura_colector_horas_sostenidas: roturaColectorHorasSostenidas,
+    multiples_lineas_umbral: multiplesLineasUmbral,
+    multiples_lineas_horas_sostenidas: multiplesLineasHorasSostenidas,
+    bateria_umbral_baja: bateriaUmbralBaja,
+    bateria_autonomia_horas: bateriaAutonomiaHoras,
+    corte_corriente_horas_sostenidas: corteCorrienteHorasSostenidas,
+    fuga_leve_horas_sostenidas: fugaLeveHorasSostenidas,
+    embozo_horas_sostenidas: embozoHorasSostenidas,
+  });
+
+  // Guardado automático de los ajustes de la instalación.
+  //
+  // La foto de referencia se toma la PRIMERA vez que se evalúan, ya con lo del
+  // servidor cargado. A partir de ahí solo se guarda si algo difiere de esa
+  // foto, o sea si lo has cambiado tú. Sin esa comparación, abrir el panel
+  // reescribiría el servidor con lo que hubiera quedado en ese navegador, que
+  // es justo lo que pasó en Cubierta Galileo y por lo que esto era manual.
+  const ajustesCargadosRef = useRef(null);
+  const guardadoAjustesRef = useRef(null);
+  useEffect(() => {
+    if (!loaded) return;
+    const actual = JSON.stringify(ajustesInstalacion());
+    if (ajustesCargadosRef.current === null) {
+      ajustesCargadosRef.current = actual;
+      return;
+    }
+    if (ajustesCargadosRef.current === actual) return;
+    clearTimeout(guardadoAjustesRef.current);
+    guardadoAjustesRef.current = setTimeout(() => {
+      const aMandar = ajustesInstalacion();
+      guardarAjustesProyecto(aMandar).then((r) => {
+        if (r.ok) ajustesCargadosRef.current = JSON.stringify(aMandar);
+        else setAvisoAlarmasInstalacion(`no se pudo guardar: ${r.error}`);
+      });
+    }, 1200);
+  });
+
+    // El botón sigue existiendo para quien quiera forzar el guardado, pero ya no
+  // hace falta: los cambios se guardan solos (ver el efecto de arriba).
   const guardarAlarmasInstalacion = async () => {
     setGuardandoAlarmasInstalacion(true);
     setAvisoAlarmasInstalacion(null);
-    // Se manda TODA la configuración de la instalación, no solo las alarmas.
-    // Antes solo viajaba alarmas_activas: los umbrales de presión, la ETo, los
-    // factores estacionales, el fertilizante y los tiempos sostenidos se leían
-    // del servidor pero no se escribían nunca. Y como localStorage manda al
-    // cargar, el valor editado tapaba al del servidor en ESE navegador — así
-    // que el panel enseñaba una cosa y el worker evaluaba otra. Fue lo que
-    // pasó en Urquinaona: umbral cambiado en pantalla, 611 alarmas generadas
-    // con el viejo.
-    const resultado = await guardarAjustesProyecto({
-      alarmas_activas: alarmasInstalacion,
-      presion_bar: pressureBar,
-      presion_sin_agua: presionSinAgua,
-      presion_baja: presionBaja,
-      presion_alta: presionAlta,
-      presion_escala_max: presionEscalaMax,
-      presion_horas_sin_agua: presionHorasSinAgua,
-      presion_horas_baja: presionHorasBaja,
-      presion_horas_alta: presionHorasAlta,
-      eto_sol: etoSol,
-      eto_semisombra: etoSemisombra,
-      eto_sombra: etoSombra,
-      factor_primavera: factoresEstacionales.primavera,
-      factor_verano: factoresEstacionales.verano,
-      factor_otono: factoresEstacionales.otono,
-      factor_invierno: factoresEstacionales.invierno,
-      umbral_balance_hidrico: umbralBalanceHidrico,
-      wue_gramos_por_litro: wueGramosPorLitro,
-      fertilizante_tanque_l: fertilizerTanqueL,
-      fertilizante_dosis_ml_por_litro: fertilizerDosisMlPorLitro,
-      fertilizante_umbral_bajo: fertilizanteUmbralBajo,
-      fertilizante_umbral_agotado: fertilizanteUmbralAgotado,
-      fertilizante_horas_sostenidas: fertilizanteHorasSostenidas,
-      rotura_colector_litros_hora: roturaColectorLitrosHora,
-      rotura_colector_horas_sostenidas: roturaColectorHorasSostenidas,
-      multiples_lineas_umbral: multiplesLineasUmbral,
-      multiples_lineas_horas_sostenidas: multiplesLineasHorasSostenidas,
-      bateria_umbral_baja: bateriaUmbralBaja,
-      bateria_autonomia_horas: bateriaAutonomiaHoras,
-      corte_corriente_horas_sostenidas: corteCorrienteHorasSostenidas,
-      fuga_leve_horas_sostenidas: fugaLeveHorasSostenidas,
-      embozo_horas_sostenidas: embozoHorasSostenidas,
-    });
+    const aMandar = ajustesInstalacion();
+    const resultado = await guardarAjustesProyecto(aMandar);
+    if (resultado.ok) ajustesCargadosRef.current = JSON.stringify(aMandar);
     setGuardandoAlarmasInstalacion(false);
     setAvisoAlarmasInstalacion(
       resultado.ok ? "guardado en el servidor ✓" : `no se pudo guardar: ${resultado.error}`
