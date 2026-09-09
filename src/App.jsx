@@ -3228,6 +3228,17 @@ export default function VerdticalControlPanel() {
   // Si una línea no aparece aquí (backend no disponible, o línea sin mapear
   // a Loxone todavía), se sigue usando la simulación local para ella.
   const [lecturasReales, setLecturasReales] = useState({});
+  // ¿Han llegado ya las primeras lecturas reales del servidor? Hasta entonces
+  // el panel pintaría valores simulados (ver simulateSector) que luego cambian
+  // solos: números largos y falsos que se corrigen a los pocos segundos. Da
+  // muy mala impresión y, peor, enseña como cierto algo que no lo es.
+  // Preferimos hacer esperar.
+  const [lecturasListas, setLecturasListas] = useState(false);
+  // Tope de espera: si el Miniserver no responde —y hoy hemos visto que a veces
+  // tarda entre 1 y 5 segundos, o falla— el panel tiene que abrirse igual. Más
+  // vale entrar con datos viejos y avisando que quedarse en una pantalla de
+  // carga eterna delante de la instalación.
+  const [esperaAgotada, setEsperaAgotada] = useState(false);
   // Interruptor SOLO de pruebas: simula que se agota la batería de respaldo
   // del PLC (sin datos en absoluto), sin depender de la conexión real a
   // internet del dispositivo — así se puede probar sin desconectar el wifi.
@@ -3792,6 +3803,14 @@ export default function VerdticalControlPanel() {
     return () => clearInterval(interval);
   }, []);
 
+  // Tope de la espera inicial. Sin esto, una instalación cuyo Miniserver no
+  // conteste dejaría al técnico mirando "Conectando con la instalación…" para
+  // siempre, que es peor que entrar con datos de la última visita.
+  useEffect(() => {
+    const t = setTimeout(() => setEsperaAgotada(true), 12000);
+    return () => clearTimeout(t);
+  }, []);
+
   useEffect(() => {
     let cancelado = false;
     const actualizar = async () => {
@@ -3801,6 +3820,7 @@ export default function VerdticalControlPanel() {
         obtenerContadoresGenerales(),
       ]);
       if (datos && !cancelado) setLecturasReales(datos);
+      if (!cancelado) setLecturasListas(true);
       if (!cancelado) setCaudalGeneralReal(general);
       if (!cancelado && generales) setContadoresGenerales(generales);
     };
@@ -5676,10 +5696,14 @@ export default function VerdticalControlPanel() {
     });
   };
 
-  if (!sectors) {
+  // Se espera a las primeras lecturas reales antes de enseñar nada, salvo que
+  // se agote el tope. Solo aplica a instalaciones emparejadas con el backend:
+  // una de demo no tiene lecturas que esperar.
+  const hayLineasReales = (sectors || []).some((s) => s.lineaBackendId);
+  if (!sectors || (hayLineasReales && !lecturasListas && !esperaAgotada)) {
     return (
       <div style={{ padding: "2rem", fontFamily: "var(--vc-font-body)", color: "var(--vc-text-muted)" }}>
-        Cargando panel de riego…
+        Conectando con la instalación…
       </div>
     );
   }
