@@ -1473,7 +1473,7 @@ function HorarioRow({ evento, index, onChange, onRemove, canRemove, conflicto })
   );
 }
 
-function SectorCard({ sector, now, mainSupply, maestraCerrada, tecnico, cliente, presionEnRangoTrabajo, presionBaja, presionAlta, balanceHidrico, umbralBalanceHidrico, todosLosSectores, etoSol, etoSemisombra, etoSombra, factoresEstacionales, alarmHistory, alarmasInstalacion, onUpdate, onRemove, onRearm, onRearmFault, guardandoConfig, avisoGuardarConfig, onGuardarConfig, zonasBackend }) {
+function SectorCard({ sector, now, mainSupply, maestraCerrada, tecnico, cliente, presionEnRangoTrabajo, presionBaja, presionAlta, balanceHidrico, umbralBalanceHidrico, todosLosSectores, etoSol, etoSemisombra, etoSombra, factoresEstacionales, alarmHistory, alarmasInstalacion, onUpdate, onRemove, onRearm, onRearmFault, guardandoConfig, avisoGuardarConfig, onGuardarConfig, zonasBackend, sinSenal }) {
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [editingSchedule, setEditingSchedule] = useState(false);
   const [showCharts, setShowCharts] = useState(false);
@@ -1838,13 +1838,25 @@ function SectorCard({ sector, now, mainSupply, maestraCerrada, tecnico, cliente,
       )}
 
       <div className="vc-card-body">
-        <ValveHandle open={active} />
+        {/* Sin señal no se puede decir si está abierta o cerrada: lo honesto es
+            decir que no se sabe, no enseñar "cerrada" —que parece un estado
+            normal— cuando en realidad el sistema está a ciegas. */}
+        <ValveHandle open={sinSenal ? false : active} />
         <div className="vc-readout">
-          <span className="vc-readout-label">{active ? "abierta" : "cerrada"}</span>
+          <span className={sinSenal ? "vc-readout-label vc-readout-sin-senal" : "vc-readout-label"}>
+            {sinSenal ? "SIN SEÑAL" : active ? "abierta" : "cerrada"}
+          </span>
           <span className="vc-readout-value">{nominalFlow} L/h nom.</span>
         </div>
       </div>
 
+      {sinSenal && (
+        <div className="vc-sin-senal-banner">
+          ⚡ <strong>SIN SEÑAL DE LA INSTALACIÓN</strong> — no llega ningún dato. Lo habitual es un corte
+          de corriente o una caída de la conexión. Mientras siga así no hay riego automático ni alarmas,
+          y lo que se ve en pantalla es la última foto conocida.
+        </div>
+      )}
       {programacionInerte && (
         <div className="vc-prog-inerte">
           ⚠ <strong>Esta línea no regará sola.</strong>{" "}
@@ -5818,6 +5830,22 @@ export default function VerdticalControlPanel() {
     );
   }
 
+  // ¿Hay señal de la instalación? Se mira la lectura más reciente que haya
+  // llegado del servidor: si la más fresca tiene más de 10 minutos, el
+  // Miniserver no está mandando nada — corte de corriente, o conexión caída.
+  //
+  // Se detecta por la ANTIGÜEDAD del dato y no por un error de red, porque el
+  // panel habla con nuestro servidor, no con el Miniserver: nuestro servidor
+  // responde perfectamente y devuelve la última foto que tenga, por vieja que
+  // sea. Sin esto, un jardín sin corriente se ve idéntico a uno funcionando.
+  const MINUTOS_SIN_SENAL = 10;
+  const lecturaMasFresca = (lecturasReales?.porPosicion || [])
+    .map((l) => (l.medidoEn ? new Date(l.medidoEn).getTime() : 0))
+    .reduce((max, t) => Math.max(max, t), 0);
+  const minutosSinSenal = lecturaMasFresca ? Math.floor((Date.now() - lecturaMasFresca) / 60000) : null;
+  const instalacionSinSenal =
+    sectors.some((s) => s.lineaBackendId) && minutosSinSenal !== null && minutosSinSenal >= MINUTOS_SIN_SENAL;
+
   const totalFlowMeasured = sectors.reduce((sum, s) => sum + Number(s.sensors?.flowMeasured || 0), 0);
   const anyActive =
     (mainSupply && !maestraCerrada && sectors.some((s) => isSectorActiveNow(s, now))) || totalFlowMeasured > 0;
@@ -7838,6 +7866,22 @@ export default function VerdticalControlPanel() {
         /* Aviso naranja de programación que no se va a ejecutar. Deliberadamente
            llamativo y arriba del todo: el estado "parece programada pero no lo
            está" ya ha costado un riego que no se hizo. */
+        /* Instalación sin señal: rojo y en grande. No es un aviso más — mientras
+           dure, nada de lo que se ve en pantalla está pasando de verdad. */
+        .vc-sin-senal-banner {
+          margin: 8px 0 0;
+          padding: 10px 12px;
+          background: #3a1616;
+          border: 1px solid var(--vc-red, #e0645b);
+          border-radius: 6px;
+          color: #ffd9d5;
+          font-size: 12px;
+          line-height: 1.45;
+        }
+        .vc-readout-sin-senal {
+          color: var(--vc-red, #e0645b);
+          font-weight: 700;
+        }
         .vc-prog-inerte {
           margin: 8px 0 0;
           padding: 8px 10px;
@@ -11213,6 +11257,7 @@ export default function VerdticalControlPanel() {
               avisoGuardarConfig={avisoGuardarConfigLinea && avisoGuardarConfigLinea.id === s.id ? avisoGuardarConfigLinea : null}
               onGuardarConfig={() => guardarConfigLinea(s)}
               zonasBackend={zonasBackend}
+              sinSenal={instalacionSinSenal}
             />
           );
         })}
