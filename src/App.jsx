@@ -430,6 +430,9 @@ function fusionarLineaConBackend(s, l) {
     emitterFlow: l.caudal_difusor_lh ?? s.emitterFlow ?? undefined,
     // Id real de esta línea en el backend — identifica a qué línea corresponde
     // este sector para el riego manual real y la programación (ver apiClient.js).
+    // La duración de tanda también viene del servidor cuando el sector no
+    // tiene una propia: antes vivía solo en el navegador.
+    duracionTandaAuto: s.duracionTandaAuto ?? l.duracion_tanda_min ?? 25,
     lineaBackendId: s.lineaBackendId ?? l.id,
   };
 }
@@ -655,7 +658,7 @@ function construirSectorDesdeLineaBackend(l, indice) {
     exposicion: l.exposicion ?? "sol",
     emitters: l.num_difusores ?? undefined,
     emitterFlow: l.caudal_difusor_lh ?? undefined,
-    duracionTandaAuto: 25,
+    duracionTandaAuto: l.duracion_tanda_min ?? 25,
     hourlyConsumption: Array(24).fill(0),
     history: [],
     dailyConsumption: [],
@@ -5422,6 +5425,7 @@ export default function VerdticalControlPanel() {
     umbral_temperatura_max: s.thresholds?.temperatureMax ?? null,
     umbral_caudal_min_pct: s.thresholds?.flowMinPercent ?? null,
     umbral_caudal_max_pct: s.thresholds?.flowMaxPercent ?? null,
+    duracion_tanda_min: s.duracionTandaAuto ?? null,
   });
 
   // Guardado automático de la configuración de línea.
