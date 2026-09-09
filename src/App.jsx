@@ -1473,7 +1473,7 @@ function HorarioRow({ evento, index, onChange, onRemove, canRemove, conflicto })
   );
 }
 
-function SectorCard({ sector, now, mainSupply, maestraCerrada, tecnico, cliente, presionEnRangoTrabajo, presionBaja, presionAlta, balanceHidrico, umbralBalanceHidrico, todosLosSectores, etoSol, etoSemisombra, etoSombra, factoresEstacionales, alarmHistory, alarmasInstalacion, onUpdate, onRemove, onRearm, onRearmFault, guardandoConfig, avisoGuardarConfig, onGuardarConfig, zonasBackend, sinSenal }) {
+function SectorCard({ sector, now, mainSupply, maestraCerrada, tecnico, cliente, presionEnRangoTrabajo, presionBaja, presionAlta, balanceHidrico, umbralBalanceHidrico, todosLosSectores, etoSol, etoSemisombra, etoSombra, factoresEstacionales, alarmHistory, alarmasInstalacion, onUpdate, onRemove, onRearm, onRearmFault, guardandoConfig, avisoGuardarConfig, onGuardarConfig, zonasBackend }) {
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [editingSchedule, setEditingSchedule] = useState(false);
   const [showCharts, setShowCharts] = useState(false);
@@ -1838,25 +1838,13 @@ function SectorCard({ sector, now, mainSupply, maestraCerrada, tecnico, cliente,
       )}
 
       <div className="vc-card-body">
-        {/* Sin señal no se puede decir si está abierta o cerrada: lo honesto es
-            decir que no se sabe, no enseñar "cerrada" —que parece un estado
-            normal— cuando en realidad el sistema está a ciegas. */}
-        <ValveHandle open={sinSenal ? false : active} />
+        <ValveHandle open={active} />
         <div className="vc-readout">
-          <span className={sinSenal ? "vc-readout-label vc-readout-sin-senal" : "vc-readout-label"}>
-            {sinSenal ? "SIN SEÑAL" : active ? "abierta" : "cerrada"}
-          </span>
+          <span className="vc-readout-label">{active ? "abierta" : "cerrada"}</span>
           <span className="vc-readout-value">{nominalFlow} L/h nom.</span>
         </div>
       </div>
 
-      {sinSenal && (
-        <div className="vc-sin-senal-banner">
-          ⚡ <strong>SIN SEÑAL DE LA INSTALACIÓN</strong> — no llega ningún dato. Lo habitual es un corte
-          de corriente o una caída de la conexión. Mientras siga así no hay riego automático ni alarmas,
-          y lo que se ve en pantalla es la última foto conocida.
-        </div>
-      )}
       {programacionInerte && (
         <div className="vc-prog-inerte">
           ⚠ <strong>Esta línea no regará sola.</strong>{" "}
@@ -3893,7 +3881,25 @@ export default function VerdticalControlPanel() {
   // "datosActivos" combina la conexión real del navegador con el
   // interruptor de pruebas de batería agotada — es lo que de verdad decide
   // si hay datos o no, en vez de usar isOnline directamente en todos lados.
-  const datosActivos = isOnline && !simulacionBateriaAgotada && bateriaPlcNivel > 0;
+  // ¿Está reportando la instalación? Se mira la lectura más reciente que haya
+  // llegado del servidor: si la más fresca tiene más de 10 minutos, el
+  // Miniserver no está mandando nada — corte de corriente o conexión caída.
+  //
+  // Va por la ANTIGÜEDAD del dato y no por un error de red, porque el panel
+  // habla con NUESTRO servidor, no con el Miniserver: nuestro servidor responde
+  // perfectamente y devuelve la última foto que tenga, por vieja que sea. Por
+  // eso "en línea" seguía en verde con la instalación horas sin corriente:
+  // isOnline mira la conexión del navegador, que estaba perfecta.
+  const MINUTOS_SIN_SENAL = 10;
+  const lecturaMasFresca = (lecturasReales?.porPosicion || [])
+    .map((l) => (l.medidoEn ? new Date(l.medidoEn).getTime() : 0))
+    .reduce((max, t) => Math.max(max, t), 0);
+  const instalacionSinSenal =
+    Boolean(sectors?.some((s) => s.lineaBackendId)) &&
+    lecturaMasFresca > 0 &&
+    Date.now() - lecturaMasFresca >= MINUTOS_SIN_SENAL * 60000;
+  const datosActivos =
+    isOnline && !simulacionBateriaAgotada && bateriaPlcNivel > 0 && !instalacionSinSenal;
 
   // La falta de datos es un problema del PANEL viendo el sistema, no del
   // sistema en sí: el PLC sigue regando aunque el panel se quede a ciegas
@@ -5830,22 +5836,6 @@ export default function VerdticalControlPanel() {
     );
   }
 
-  // ¿Hay señal de la instalación? Se mira la lectura más reciente que haya
-  // llegado del servidor: si la más fresca tiene más de 10 minutos, el
-  // Miniserver no está mandando nada — corte de corriente, o conexión caída.
-  //
-  // Se detecta por la ANTIGÜEDAD del dato y no por un error de red, porque el
-  // panel habla con nuestro servidor, no con el Miniserver: nuestro servidor
-  // responde perfectamente y devuelve la última foto que tenga, por vieja que
-  // sea. Sin esto, un jardín sin corriente se ve idéntico a uno funcionando.
-  const MINUTOS_SIN_SENAL = 10;
-  const lecturaMasFresca = (lecturasReales?.porPosicion || [])
-    .map((l) => (l.medidoEn ? new Date(l.medidoEn).getTime() : 0))
-    .reduce((max, t) => Math.max(max, t), 0);
-  const minutosSinSenal = lecturaMasFresca ? Math.floor((Date.now() - lecturaMasFresca) / 60000) : null;
-  const instalacionSinSenal =
-    sectors.some((s) => s.lineaBackendId) && minutosSinSenal !== null && minutosSinSenal >= MINUTOS_SIN_SENAL;
-
   const totalFlowMeasured = sectors.reduce((sum, s) => sum + Number(s.sensors?.flowMeasured || 0), 0);
   const anyActive =
     (mainSupply && !maestraCerrada && sectors.some((s) => isSectorActiveNow(s, now))) || totalFlowMeasured > 0;
@@ -5991,6 +5981,12 @@ export default function VerdticalControlPanel() {
           box-sizing: border-box;
         }
         .vc-connection-badge-off {
+          border-color: var(--vc-red);
+          color: var(--vc-red);
+        }
+        /* Sin señal el interruptor general se ve en rojo, a juego con la palanca
+           bajada: mientras dure, el sistema no puede accionar nada. */
+        .vc-supply-toggle-off {
           border-color: var(--vc-red);
           color: var(--vc-red);
         }
@@ -7866,22 +7862,6 @@ export default function VerdticalControlPanel() {
         /* Aviso naranja de programación que no se va a ejecutar. Deliberadamente
            llamativo y arriba del todo: el estado "parece programada pero no lo
            está" ya ha costado un riego que no se hizo. */
-        /* Instalación sin señal: rojo y en grande. No es un aviso más — mientras
-           dure, nada de lo que se ve en pantalla está pasando de verdad. */
-        .vc-sin-senal-banner {
-          margin: 8px 0 0;
-          padding: 10px 12px;
-          background: #3a1616;
-          border: 1px solid var(--vc-red, #e0645b);
-          border-radius: 6px;
-          color: #ffd9d5;
-          font-size: 12px;
-          line-height: 1.45;
-        }
-        .vc-readout-sin-senal {
-          color: var(--vc-red, #e0645b);
-          font-weight: 700;
-        }
         .vc-prog-inerte {
           margin: 8px 0 0;
           padding: 8px 10px;
@@ -8455,10 +8435,16 @@ export default function VerdticalControlPanel() {
           <div className="vc-top-buttons">
             <div
               className={datosActivos ? "vc-connection-badge" : "vc-connection-badge vc-connection-badge-off"}
-              title={datosActivos ? "Recibiendo datos con normalidad" : "Sin datos — comunicación perdida o batería del PLC agotada"}
+              title={
+                instalacionSinSenal
+                  ? "La instalación lleva más de 10 minutos sin mandar una sola lectura: corte de corriente o conexión caída. Lo que ves en pantalla es la última foto conocida."
+                  : datosActivos
+                    ? "Recibiendo datos con normalidad"
+                    : "Sin datos — comunicación perdida o batería del PLC agotada"
+              }
             >
               <span className="vc-connection-dot" />
-              {datosActivos ? "en línea" : "sin datos"}
+              {instalacionSinSenal ? "sin señal" : datosActivos ? "en línea" : "sin datos"}
             </div>
             {plcSinCorriente && (
               <div
@@ -8471,12 +8457,23 @@ export default function VerdticalControlPanel() {
               </div>
             )}
             <button
-              className="vc-supply-toggle vc-supply-toggle-lg"
+              className={
+                instalacionSinSenal
+                  ? "vc-supply-toggle vc-supply-toggle-lg vc-supply-toggle-off"
+                  : "vc-supply-toggle vc-supply-toggle-lg"
+              }
               onClick={() => setMainSupply((v) => !v)}
-              title="Corte general de riego: apagado, no se puede activar ninguna electroválvula. Es independiente de si el panel tiene datos o no — la falta de datos no apaga el sistema. No confundir con la electroválvula maestra, en la tarjeta 'Estado red'."
+              title={
+                instalacionSinSenal
+                  ? "Sin señal de la instalación: aunque el interruptor general esté activado, ahora mismo no se puede accionar ninguna electroválvula. Vuelve solo en cuanto la instalación vuelva a mandar datos."
+                  : "Corte general de riego: apagado, no se puede activar ninguna electroválvula. No confundir con la electroválvula maestra, en la tarjeta 'Estado red'."
+              }
             >
-              <StatusDot active={mainSupply} mode="horario" />
-              sistema {mainSupply ? "activado" : "apagado"}
+              <StatusDot active={mainSupply && !instalacionSinSenal} mode="horario" />
+              {/* Sin señal no se puede accionar ninguna electroválvula, diga lo
+                  que diga el interruptor general: mostrarlo "activado" sería
+                  mentir. mainSupply no se toca, solo se muestra la realidad. */}
+              sistema {instalacionSinSenal ? "OFF" : mainSupply ? "activado" : "apagado"}
             </button>
             {(() => {
               const co2Kg = Math.round(((totalLitrosHistorico * wueGramosPorLitro * 0.45 * 3.667) / 1000) * 100) / 100;
@@ -11257,7 +11254,6 @@ export default function VerdticalControlPanel() {
               avisoGuardarConfig={avisoGuardarConfigLinea && avisoGuardarConfigLinea.id === s.id ? avisoGuardarConfigLinea : null}
               onGuardarConfig={() => guardarConfigLinea(s)}
               zonasBackend={zonasBackend}
-              sinSenal={instalacionSinSenal}
             />
           );
         })}
