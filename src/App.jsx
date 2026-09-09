@@ -3680,7 +3680,16 @@ export default function VerdticalControlPanel() {
           // esta instalación tiene un número distinto de líneas.
           setSectors(
             lineasBackend && lineasBackend.length > 0
-              ? lineasBackend.map(construirSectorDesdeLineaBackend)
+              ? // La programación guardada también se carga aquí. Antes esta rama
+                // —la de un dispositivo sin datos locales, o sea un móvil nuevo o
+                // el panel compartido— construía los sectores desde el backend
+                // pero se saltaba fusionarProgramacionConBackend. Resultado: se
+                // veían los horarios generados por defecto en vez de los reales,
+                // y el aviso "no regará sola" salía sobre una programación que
+                // sí estaba guardada en el servidor.
+                lineasBackend
+                  .map(construirSectorDesdeLineaBackend)
+                  .map((s) => fusionarProgramacionConBackend(s, programasBackend))
               : fusionarConBackend(defaultSectors())
           );
           setDailyConsumption(demoDailyConsumption());
